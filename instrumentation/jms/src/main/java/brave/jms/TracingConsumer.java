@@ -47,8 +47,7 @@ abstract class TracingConsumer<C> {
     if (message == null || tracing.isNoop()) return;
     MessageConsumerRequest request = new MessageConsumerRequest(message, destination(message));
 
-    TraceContextOrSamplingFlags extracted =
-      jmsTracing.extractAndClearProperties(extractor, request, message);
+    TraceContextOrSamplingFlags extracted = extractor.extract(request);
     Span span = jmsTracing.nextMessagingSpan(sampler, request, extracted);
 
     if (!span.isNoop()) {
@@ -61,6 +60,7 @@ abstract class TracingConsumer<C> {
       long timestamp = tracing.clock(span.context()).currentTimeMicroseconds();
       span.start(timestamp).finish(timestamp);
     }
+    jmsTracing.clearProperties(message);
     injector.inject(span.context(), request);
   }
 

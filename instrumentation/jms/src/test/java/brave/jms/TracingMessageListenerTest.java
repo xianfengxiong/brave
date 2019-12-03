@@ -185,8 +185,7 @@ public class TracingMessageListenerTest {
 
     onMessageConsumed(message);
 
-    // clearing headers ensures later work doesn't try to use the old parent
-    assertThat(message.getProperties()).isEmpty();
+    assertThat(message.getProperties()).isNotEmpty();
 
     assertThat(spans)
       .filteredOn(span -> span.kind() == CONSUMER)
@@ -206,8 +205,7 @@ public class TracingMessageListenerTest {
 
     onMessageConsumed(message);
 
-    // clearing headers ensures later work doesn't try to use the old parent
-    assertThat(message.getProperties()).isEmpty();
+    assertThat(message.getProperties()).isNotEmpty();
 
     assertThat(spans)
       .extracting(Span::parentId)
@@ -220,8 +218,7 @@ public class TracingMessageListenerTest {
 
     onMessageConsumed(message);
 
-    // clearing headers ensures later work doesn't try to use the old parent
-    assertThat(message.getProperties()).isEmpty();
+    assertThat(message.getProperties()).isNotEmpty();
 
     assertThat(spans)
       .filteredOn(span -> span.kind() == CONSUMER)
@@ -238,8 +235,7 @@ public class TracingMessageListenerTest {
 
     onMessageConsumed(message);
 
-    // clearing headers ensures later work doesn't try to use the old parent
-    assertThat(message.getProperties()).isEmpty();
+    assertThat(message.getProperties()).isNotEmpty();
 
     assertThat(spans)
       .extracting(Span::parentId)

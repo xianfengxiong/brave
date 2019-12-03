@@ -102,9 +102,9 @@ final class TracingProducer<K, V> implements Producer<K, V> {
     // NOTE: Brave instrumentation used properly does not result in stale header entries, as we
     // always clear message headers after reading.
     Span span;
+    TraceContextOrSamplingFlags extracted = null;
     if (maybeParent == null) {
-      TraceContextOrSamplingFlags extracted =
-        kafkaTracing.extractAndClearHeaders(extractor, request, record.headers());
+      extracted = extractor.extract(request);
       span = kafkaTracing.nextMessagingSpan(sampler, request, extracted);
     } else { // If we have a span in scope assume headers were cleared before
       span = tracer.newChild(maybeParent);
@@ -120,6 +120,7 @@ final class TracingProducer<K, V> implements Producer<K, V> {
       span.start();
     }
 
+    kafkaTracing.clearHeaders(extracted, record.headers());
     injector.inject(span.context(), request);
 
     Tracer.SpanInScope ws = tracer.withSpanInScope(span);

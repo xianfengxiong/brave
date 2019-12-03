@@ -118,8 +118,7 @@ public class TracingRabbitListenerAdviceTest {
     Message message = MessageBuilder.withBody(new byte[0]).andProperties(props).build();
     onMessageConsumed(message);
 
-    // cleared the headers to later work doesn't try to use the old parent
-    assertThat(message.getMessageProperties().getHeaders()).isEmpty();
+    assertThat(message.getMessageProperties().getHeaders()).isNotEmpty();
 
     assertThat(spans)
       .filteredOn(span -> span.kind() == CONSUMER)
@@ -134,8 +133,7 @@ public class TracingRabbitListenerAdviceTest {
     Message message = MessageBuilder.withBody(new byte[0]).andProperties(props).build();
     onMessageConsumed(message);
 
-    // cleared the headers to later work doesn't try to use the old parent
-    assertThat(message.getMessageProperties().getHeaders()).isEmpty();
+    assertThat(message.getMessageProperties().getHeaders()).isNotEmpty();
 
     assertThat(spans)
       .filteredOn(span -> span.kind() == CONSUMER)

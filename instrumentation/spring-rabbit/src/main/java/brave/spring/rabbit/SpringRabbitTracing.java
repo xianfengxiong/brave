@@ -213,18 +213,6 @@ public final class SpringRabbitTracing {
     return factory;
   }
 
-  <R> TraceContextOrSamplingFlags extractAndClearHeaders(
-    Extractor<R> extractor, R request, Message message
-  ) {
-    TraceContextOrSamplingFlags extracted = extractor.extract(request);
-    // Clear any propagation keys present in the headers
-    if (!extracted.equals(TraceContextOrSamplingFlags.EMPTY)) {
-      MessageProperties properties = message.getMessageProperties();
-      if (properties != null) clearHeaders(properties.getHeaders());
-    }
-    return extracted;
-  }
-
   /** Creates a potentially noop remote span representing this request */
   Span nextMessagingSpan(
     SamplerFunction<MessagingRequest> sampler,
@@ -239,7 +227,10 @@ public final class SpringRabbitTracing {
     return tracer.nextSpan(extracted);
   }
 
-  void clearHeaders(Map<String, Object> headers) {
-    for (String key : propagationKeys) headers.remove(key);
+  void clearHeaders(TraceContextOrSamplingFlags extracted, Message message) {
+    if (!TraceContextOrSamplingFlags.EMPTY.equals(extracted)) {
+      Map<String, Object> headers = message.getMessageProperties().getHeaders();
+      for (String key : propagationKeys) headers.remove(key);
+    }
   }
 }

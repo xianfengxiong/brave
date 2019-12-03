@@ -25,14 +25,15 @@ import brave.propagation.TraceContext.Extractor;
 import brave.propagation.TraceContext.Injector;
 import brave.propagation.TraceContextOrSamplingFlags;
 import brave.sampler.SamplerFunction;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
+
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /** Use this class to decorate your Kafka consumer / producer and enable Tracing. */
 public final class KafkaTracing {
@@ -171,23 +172,12 @@ public final class KafkaTracing {
     // Eventhough the type is ConsumerRecord, this is not a (remote) consumer span. Only "poll"
     // events create consumer spans. Since this is a processor span, we use the normal sampler.
     TraceContextOrSamplingFlags extracted =
-      extractAndClearHeaders(processorExtractor, record.headers(), record.headers());
+        processorExtractor.extract(record.headers());
     Span result = tracer.nextSpan(extracted);
     if (extracted.context() == null && !result.isNoop()) {
       addTags(record, result);
     }
     return result;
-  }
-
-  <R> TraceContextOrSamplingFlags extractAndClearHeaders(
-    Extractor<R> extractor, R request, Headers headers
-  ) {
-    TraceContextOrSamplingFlags extracted = extractor.extract(request);
-    // Clear any propagation keys present in the headers
-    if (!extracted.equals(TraceContextOrSamplingFlags.EMPTY)) {
-      clearHeaders(headers);
-    }
-    return extracted;
   }
 
   /** Creates a potentially noop remote span representing this request */
@@ -206,11 +196,13 @@ public final class KafkaTracing {
 
   // We can't just skip clearing headers we use because we might inject B3 single, yet have stale B3
   // multi, or visa versa.
-  void clearHeaders(Headers headers) {
-    // Headers::remove creates and consumes an iterator each time. This does one loop instead.
-    for (Iterator<Header> i = headers.iterator(); i.hasNext(); ) {
-      Header next = i.next();
-      if (propagationKeys.contains(next.key())) i.remove();
+  void clearHeaders(TraceContextOrSamplingFlags extracted, Headers headers) {
+    if (!TraceContextOrSamplingFlags.EMPTY.equals(extracted)) {
+      // Headers::remove creates and consumes an iterator each time. This does one loop instead.
+      for (Iterator<Header> i = headers.iterator(); i.hasNext(); ) {
+        Header next = i.next();
+        if (propagationKeys.contains(next.key())) i.remove();
+      }
     }
   }
 

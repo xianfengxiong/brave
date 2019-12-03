@@ -242,14 +242,14 @@ public class JmsTracingTest extends JmsTest {
     assertThat(takeSpan().tags()).isEmpty();
   }
 
-  @Test public void nextSpan_should_clear_propagation_headers() throws Exception {
+  @Test public void nextSpan_should_not_clear_propagation_headers() throws Exception {
     TraceContext context =
       TraceContext.newBuilder().traceId(1L).parentId(2L).spanId(3L).debug(true).build();
     Propagation.B3_STRING.injector(SETTER).inject(context, message);
     Propagation.B3_SINGLE_STRING.injector(SETTER).inject(context, message);
 
     jmsTracing.nextSpan(message);
-    assertThat(JmsTest.propertiesToMap(message)).isEmpty();
+    assertThat(JmsTest.propertiesToMap(message)).isNotEmpty();
   }
 
   @Test public void nextSpan_should_not_clear_other_headers() throws Exception {

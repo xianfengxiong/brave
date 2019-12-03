@@ -64,9 +64,9 @@ final class TracingMessagePostProcessor implements MessagePostProcessor {
     // NOTE: Brave instrumentation used properly does not result in stale header entries, as we
     // always clear message headers after reading.
     Span span;
+    TraceContextOrSamplingFlags extracted = null;
     if (maybeParent == null) {
-      TraceContextOrSamplingFlags extracted =
-        springRabbitTracing.extractAndClearHeaders(extractor, request, message);
+      extracted = extractor.extract(request);
       span = springRabbitTracing.nextMessagingSpan(sampler, request, extracted);
     } else { // If we have a span in scope assume headers were cleared before
       span = tracer.newChild(maybeParent);
@@ -80,6 +80,7 @@ final class TracingMessagePostProcessor implements MessagePostProcessor {
       span.start(timestamp).finish(timestamp);
     }
 
+    springRabbitTracing.clearHeaders(extracted, message);
     injector.inject(span.context(), request);
     return message;
   }
