@@ -17,8 +17,8 @@ import brave.Clock;
 import brave.Tracer;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
+import brave.handler.SpanListener;
 import brave.internal.Nullable;
-import brave.internal.Platform;
 import brave.internal.weaklockfree.WeakConcurrentMap;
 import brave.propagation.TraceContext;
 import java.lang.ref.Reference;
@@ -35,18 +35,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * orphans to Zipkin. Spans in this state will have a "brave.flush" annotation added to them.
  */
 public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingSpan> {
-  @Nullable final WeakConcurrentMap<MutableSpan, Throwable> spanToCaller;
   final MutableSpan defaultSpan;
   final Clock clock;
+  final SpanListener spanListener;
   final FinishedSpanHandler orphanedSpanHandler;
   final AtomicBoolean noop;
 
-  public PendingSpans(MutableSpan defaultSpan, Clock clock, FinishedSpanHandler orphanedSpanHandler,
-    boolean trackOrphans, AtomicBoolean noop) {
+  public PendingSpans(MutableSpan defaultSpan, Clock clock, SpanListener spanListener,
+    FinishedSpanHandler orphanedSpanHandler, AtomicBoolean noop) {
     this.defaultSpan = defaultSpan;
     this.clock = clock;
+    this.spanListener = spanListener;
     this.orphanedSpanHandler = orphanedSpanHandler;
-    this.spanToCaller = trackOrphans ? new WeakConcurrentMap<>() : null;
     this.noop = noop;
   }
 
@@ -72,6 +72,8 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     // save overhead calculating time if the parent is in-progress (usually is)
     TickClock clock;
     if (parentSpan != null) {
+      TraceContext parentContext = parentSpan.context();
+      if (parentContext != null) parent = parentContext;
       clock = parentSpan.clock;
       if (start) span.startTimestamp(clock.currentTimeMicroseconds());
     } else {
@@ -89,24 +91,21 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     assert parent != null || context.isLocalRoot() :
       "Bug (or unexpected call to internal code): parent can only be null in a local root!";
 
-    if (spanToCaller != null) {
-      Throwable oldCaller = spanToCaller.putIfProbablyAbsent(newSpan.span,
-        new Throwable("Thread " + Thread.currentThread().getName() + " allocated span here"));
-      assert oldCaller == null :
-        "Bug: unexpected to have an existing reference to a new MutableSpan!";
-    }
+    spanListener.onCreate(parent, context, newSpan.span);
     return newSpan;
   }
 
   /** @see brave.Span#abandon() */
   public void abandon(TraceContext context) {
-    remove(context);
+    PendingSpan last = remove(context);
+    if (last != null) spanListener.onAbandon(context, last.span);
   }
 
   /** @see brave.Span#flush() */
   public boolean flush(TraceContext context) {
     PendingSpan last = remove(context);
     if (last == null) return false;
+    spanListener.onFlush(context, last.span);
     return true;
   }
 
@@ -121,6 +120,8 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     PendingSpan last = remove(context);
     if (last == null) return false;
     last.span.finishTimestamp(timestamp != 0L ? timestamp : last.clock.currentTimeMicroseconds());
+
+    spanListener.onFinish(context, last.span);
     return true;
   }
 
@@ -139,16 +140,9 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
       assert value.context() == null : "unexpected for the weak referent to be present after GC!";
       if (flushTime == 0L) flushTime = clock.currentTimeMicroseconds();
 
-      Throwable caller = spanToCaller != null ? spanToCaller.getIfPresent(value.span) : null;
       TraceContext context = value.backupContext;
 
-      if (caller != null) {
-        String message = value.span.equals(new MutableSpan(context, null))
-          ? "Span " + context + " was allocated but never used"
-          : "Span " + context + " neither finished nor flushed before GC";
-        Platform.get().log(message, caller);
-      }
-
+      spanListener.onOrphan(context, value.span);
       value.span.annotate(flushTime, "brave.flush");
       orphanedSpanHandler.handle(context, value.span);
     }

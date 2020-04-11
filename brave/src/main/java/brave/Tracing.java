@@ -16,11 +16,14 @@ package brave;
 import brave.baggage.BaggageField;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
+import brave.handler.SpanListener;
 import brave.internal.IpLiteral;
 import brave.internal.Nullable;
 import brave.internal.Platform;
 import brave.internal.handler.NoopAwareFinishedSpanHandler;
+import brave.internal.handler.SafeSpanListener;
 import brave.internal.handler.ZipkinFinishedSpanHandler;
+import brave.internal.recorder.OrphanTracker;
 import brave.internal.recorder.PendingSpans;
 import brave.propagation.B3Propagation;
 import brave.propagation.CurrentTraceContext;
@@ -146,6 +149,7 @@ public abstract class Tracing implements Closeable {
     Propagation.Factory propagationFactory = B3Propagation.FACTORY;
     ErrorParser errorParser = ErrorParser.get();
     Set<FinishedSpanHandler> finishedSpanHandlers = new LinkedHashSet<>(); // dupes not ok
+    Set<SpanListener> spanListeners = new LinkedHashSet<>(); // dupes not ok
 
     Builder() {
       defaultSpan.localServiceName("unknown");
@@ -354,10 +358,24 @@ public abstract class Tracing implements Closeable {
      */
     public Builder addFinishedSpanHandler(FinishedSpanHandler handler) {
       if (handler == null) throw new NullPointerException("finishedSpanHandler == null");
-      if (handler != FinishedSpanHandler.NOOP) { // lenient on config bug
-        if (!finishedSpanHandlers.add(handler)) {
-          Platform.get().log("Please check configuration as %s was added twice", handler, null);
-        }
+
+      // Some configuration can coerce to no-op, ignore in this case.
+      if (handler == FinishedSpanHandler.NOOP) return this;
+
+      if (!finishedSpanHandlers.add(handler)) {
+        Platform.get().log("Please check configuration as %s was added twice", handler, null);
+      }
+      return this;
+    }
+
+    public Builder addSpanListener(SpanListener spanListener) {
+      if (spanListener == null) throw new NullPointerException("spanListener == null");
+
+      // Some configuration can coerce to no-op, ignore in this case.
+      if (spanListener == SpanListener.NOOP) return this;
+
+      if (!spanListeners.add(spanListener)) {
+        Platform.get().log("Please check configuration as %s was added twice", spanListener, null);
       }
       return this;
     }
@@ -459,6 +477,11 @@ public abstract class Tracing implements Closeable {
         finishedSpanHandler = new LogFinishedSpanHandler();
       }
 
+      Set<SpanListener> spanListeners = new LinkedHashSet<>(builder.spanListeners);
+      if (builder.trackOrphans) spanListeners.add(new OrphanTracker());
+      SpanListener spanListener =
+        SafeSpanListener.create(spanListeners.toArray(new SpanListener[0]));
+
       Set<FinishedSpanHandler> orphanedSpanHandlers = new LinkedHashSet<>();
       for (FinishedSpanHandler handler : spanHandlers) {
         if (handler.supportsOrphans()) orphanedSpanHandlers.add(handler);
@@ -471,11 +494,12 @@ public abstract class Tracing implements Closeable {
       }
 
       PendingSpans pendingSpans =
-        new PendingSpans(defaultSpan, clock, orphanedSpanHandler, builder.trackOrphans, noop);
+        new PendingSpans(defaultSpan, clock, spanListener, orphanedSpanHandler, noop);
 
       this.tracer = new Tracer(
         builder.clock,
         builder.propagationFactory,
+        spanListener,
         finishedSpanHandler,
         pendingSpans,
         builder.sampler,
