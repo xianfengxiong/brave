@@ -84,7 +84,7 @@ public final class MutableSpan implements Cloneable {
   ArrayList<String> tags;
   /** Also use pair indexing for annotations, but type object to store (startTimestamp, value). */
   ArrayList<Object> annotations;
-  Throwable caller, error;
+  Throwable error;
 
   /** @since 5.4 */
   public MutableSpan() {
