@@ -23,18 +23,24 @@ import java.util.Arrays;
 import static brave.internal.Throwables.propagateIfFatal;
 
 /** This logs exceptions instead of raising an error, as the supplied listener could have bugs. */
-public abstract class SafeSpanListener extends SpanListener {
+public final class SafeSpanListener extends SpanListener {
   // Array ensures no iterators are created at runtime
   public static SpanListener create(SpanListener[] handlers) {
     if (handlers.length == 0) return SpanListener.NOOP;
-    if (handlers.length == 1) return new Single(handlers[0]);
-    return new Multiple(handlers);
+    if (handlers.length == 1) return new SafeSpanListener(handlers[0]);
+    return new SafeSpanListener(new CompositeSpanListener(handlers));
+  }
+
+  final SpanListener delegate;
+
+  SafeSpanListener(SpanListener delegate) {
+    this.delegate = delegate;
   }
 
   @Override
   public void onCreate(@Nullable TraceContext parent, TraceContext context, MutableSpan span) {
     try {
-      doOnCreate(parent, context, span);
+      delegate.onCreate(parent, context, span);
     } catch (Throwable t) {
       propagateIfFatal(t);
       Platform.get().log("error handling create {0}", context, t);
@@ -43,7 +49,7 @@ public abstract class SafeSpanListener extends SpanListener {
 
   @Override public void onAbandon(TraceContext context, MutableSpan span) {
     try {
-      doOnAbandon(context, span);
+      delegate.onAbandon(context, span);
     } catch (Throwable t) {
       propagateIfFatal(t);
       Platform.get().log("error handling abandon {0}", context, t);
@@ -52,7 +58,7 @@ public abstract class SafeSpanListener extends SpanListener {
 
   @Override public void onFlush(TraceContext context, MutableSpan span) {
     try {
-      doOnFlush(context, span);
+      delegate.onFlush(context, span);
     } catch (Throwable t) {
       propagateIfFatal(t);
       Platform.get().log("error handling flush {0}", context, t);
@@ -61,7 +67,7 @@ public abstract class SafeSpanListener extends SpanListener {
 
   @Override public void onOrphan(TraceContext context, MutableSpan span) {
     try {
-      doOnOrphan(context, span);
+      delegate.onOrphan(context, span);
     } catch (Throwable t) {
       propagateIfFatal(t);
       Platform.get().log("error handling orphan {0}", context, t);
@@ -70,91 +76,48 @@ public abstract class SafeSpanListener extends SpanListener {
 
   @Override public void onFinish(TraceContext context, MutableSpan span) {
     try {
-      doOnFinish(context, span);
+      delegate.onFinish(context, span);
     } catch (Throwable t) {
       propagateIfFatal(t);
       Platform.get().log("error handling finish {0}", context, t);
     }
   }
 
-  abstract void doOnCreate(@Nullable TraceContext parent, TraceContext context, MutableSpan span);
-
-  abstract void doOnAbandon(TraceContext context, MutableSpan span);
-
-  abstract void doOnFlush(TraceContext context, MutableSpan span);
-
-  abstract void doOnOrphan(TraceContext context, MutableSpan span);
-
-  abstract void doOnFinish(TraceContext context, MutableSpan span);
-
-  static final class Single extends SafeSpanListener {
-    final SpanListener delegate;
-
-    Single(SpanListener delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    void doOnCreate(@Nullable TraceContext parent, TraceContext context, MutableSpan span) {
-      delegate.onCreate(parent, context, span);
-    }
-
-    @Override void doOnAbandon(TraceContext context, MutableSpan span) {
-      delegate.onAbandon(context, span);
-    }
-
-    @Override void doOnFlush(TraceContext context, MutableSpan span) {
-      delegate.onFlush(context, span);
-    }
-
-    @Override void doOnOrphan(TraceContext context, MutableSpan span) {
-      delegate.onOrphan(context, span);
-    }
-
-    @Override void doOnFinish(TraceContext context, MutableSpan span) {
-      delegate.onFinish(context, span);
-    }
-
-    @Override public String toString() {
-      return delegate.toString();
-    }
-  }
-
-  static final class Multiple extends SafeSpanListener {
+  static final class CompositeSpanListener extends SpanListener {
     final SpanListener[] listeners;
 
-    Multiple(SpanListener[] listeners) {
+    CompositeSpanListener(SpanListener[] listeners) {
       this.listeners = listeners;
     }
 
     @Override
-    void doOnCreate(@Nullable TraceContext parent, TraceContext context, MutableSpan span) {
+    public void onCreate(@Nullable TraceContext parent, TraceContext context, MutableSpan span) {
       for (SpanListener listener : listeners) {
         listener.onCreate(parent, context, span);
       }
     }
 
-    @Override void doOnAbandon(TraceContext context, MutableSpan span) {
-      for (SpanListener listener : listeners) {
-        listener.onAbandon(context, span);
+    @Override public void onAbandon(TraceContext context, MutableSpan span) {
+      for (int i = listeners.length; i-- > 0; ) {
+        listeners[i].onAbandon(context, span);
       }
     }
 
-    @Override void doOnFlush(TraceContext context, MutableSpan span) {
-      for (SpanListener listener : listeners) {
-        listener.onFlush(context, span);
+    @Override public void onFlush(TraceContext context, MutableSpan span) {
+      for (int i = listeners.length; i-- > 0; ) {
+        listeners[i].onFlush(context, span);
       }
     }
 
-    @Override void doOnOrphan(TraceContext context, MutableSpan span) {
-      for (SpanListener listener : listeners) {
-        listener.onOrphan(context, span);
+    @Override public void onOrphan(TraceContext context, MutableSpan span) {
+      for (int i = listeners.length; i-- > 0; ) {
+        listeners[i].onOrphan(context, span);
       }
     }
 
-    @Override void doOnFinish(TraceContext context, MutableSpan span) {
-      for (SpanListener listener : listeners) {
-        listener.onFinish(context, span);
+    @Override public void onFinish(TraceContext context, MutableSpan span) {
+      for (int i = listeners.length; i-- > 0; ) {
+        listeners[i].onFinish(context, span);
       }
     }
 
