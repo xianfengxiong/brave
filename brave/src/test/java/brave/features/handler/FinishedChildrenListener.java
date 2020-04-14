@@ -15,8 +15,8 @@ package brave.features.handler;
 
 import brave.handler.MutableSpan;
 import brave.handler.SpanListener;
-import brave.internal.weaklockfree.WeakConcurrentMap;
 import brave.propagation.TraceContext;
+import com.blogspot.mydailyjava.weaklockfree.WeakConcurrentMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -28,7 +28,8 @@ public abstract class FinishedChildrenListener extends SpanListener {
   protected abstract void onFinish(MutableSpan parent, Iterator<MutableSpan> children);
 
   /** This holds the children of the current parent until the former is finished or abandoned. */
-  final WeakConcurrentMap<TraceContext, TraceContext> childToParent = new WeakConcurrentMap<>();
+  final WeakConcurrentMap<TraceContext, TraceContext> childToParent =
+    new WeakConcurrentMap<>(false);
   final ParentToChildren parentToChildren = new ParentToChildren();
 
   @Override public void onCreate(TraceContext parent, TraceContext context, MutableSpan span) {
@@ -64,7 +65,8 @@ public abstract class FinishedChildrenListener extends SpanListener {
   }
 
   static final class ParentToChildren {
-    final WeakConcurrentMap<TraceContext, Set<MutableSpan>> delegate = new WeakConcurrentMap<>();
+    final WeakConcurrentMap<TraceContext, Set<MutableSpan>> delegate =
+      new WeakConcurrentMap<>(false);
 
     void add(TraceContext parent, MutableSpan child) {
       Set<MutableSpan> children = delegate.getIfPresent(parent);
