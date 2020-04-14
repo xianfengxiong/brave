@@ -19,10 +19,10 @@ import brave.propagation.TraceContext;
 import java.lang.ref.WeakReference;
 
 /**
- * This hooks into the span life-cycle covering all state transitions, including
- * when a span is created, abandoned, finished, or orphan. This is particularly different than 
- * {@link FinishedSpanHandler} that only considers finished spans.
- * 
+ * This hooks into the span life-cycle covering all state transitions, including when a span is
+ * created, abandoned, finished, or orphan. This is particularly different than {@link
+ * FinishedSpanHandler} that only considers finished spans.
+ *
  * <p>The purpose of this type is to allow tracking of children,
  * or partitioning of data for backend that needs to see an entire {@linkplain
  * TraceContext#localRootId() local root}.
@@ -39,7 +39,7 @@ import java.lang.ref.WeakReference;
  * <p>If caching the {@link TraceContext} parameter, consider a {@link WeakReference} to avoid
  * holding up garbage collection.
  */
-public class SpanListener {
+public abstract class SpanListener {
   /** Use to avoid comparing against null references */
   public static final SpanListener NOOP = new SpanListener() {
     @Override public String toString() {
@@ -51,14 +51,14 @@ public class SpanListener {
   }
 
   /**
-   * This is called when a span is allocated, but before it is started. An allocation here will
-   * result in one of:
+   * This is called when a span is allocated, but before it is started. One of the following will be
+   * called later when the created span is no longer in use.:
    *
    * <ol>
-   *   <li>{@link #onAbandon} if this was a speculative context</li>
-   *   <li>{@link #onFlush} if this was intentionally reported incomplete</li>
-   *   <li>{@link #onOrphan} if this was reported incomplete due to garbage collection</li>
-   *   <li>{@link #onFinish} if this was reported complete</li>
+   *   <li>{@link #onAbandon} if it was a speculative context</li>
+   *   <li>{@link #onFlush} if it was intentionally reported incomplete</li>
+   *   <li>{@link #onOrphan} if it was reported incomplete due to garbage collection</li>
+   *   <li>{@link #onFinish} if it was reported complete</li>
    * </ol>
    *
    * <p>The {@code parent} can be {@code null} only when the new context is a {@linkplain
@@ -82,7 +82,7 @@ public class SpanListener {
   /**
    * Called on {@link Span#flush()}.
    *
-   * <p>Even though the span here will is incomplete (missing {@link MutableSpan#finishTimestamp()},
+   * <p>Even though the span here is incomplete (missing {@link MutableSpan#finishTimestamp()},
    * it is reported to the tracing system unless a {@link FinishedSpanHandler} returns false.
    */
   public void onFlush(TraceContext context, MutableSpan span) {
@@ -91,9 +91,9 @@ public class SpanListener {
   /**
    * Called when the trace context was garbage collected prior to completion.
    *
-   * <p>Unlike {@link FinishedSpanHandler#supportsOrphans()}, this is called even if {@linkplain
-   * MutableSpan#isEmpty() empty}. Non-empty spans are reported to the tracing system unless a
-   * {@link FinishedSpanHandler} returns false.
+   * <p>Unlike {@link FinishedSpanHandler#supportsOrphans()}, this is called even if empty.
+   * Non-empty spans are reported to the tracing system unless a {@link FinishedSpanHandler} returns
+   * false.
    *
    * @param context unlike the other methods, this context will not be the same reference as {@link
    * #onCreate} even though it will have the same trace IDs.
