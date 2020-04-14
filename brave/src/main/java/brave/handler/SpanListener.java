@@ -19,8 +19,11 @@ import brave.propagation.TraceContext;
 import java.lang.ref.WeakReference;
 
 /**
- * This is like {@link FinishedSpanHandler}, except it can cover all state conditions, including
- * when a span is created or abandoned. The purpose of this type is to allow tracking of children,
+ * This hooks into the span life-cycle covering all state transitions, including
+ * when a span is created, abandoned, finished, or orphan. This is particularly different than 
+ * {@link FinishedSpanHandler} that only considers finished spans.
+ * 
+ * <p>The purpose of this type is to allow tracking of children,
  * or partitioning of data for backend that needs to see an entire {@linkplain
  * TraceContext#localRootId() local root}.
  *
