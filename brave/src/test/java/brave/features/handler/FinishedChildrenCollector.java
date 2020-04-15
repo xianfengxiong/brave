@@ -42,7 +42,7 @@ public abstract class FinishedChildrenCollector implements SpanCollector {
   }
 
   @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
-    // Kick-out if the this was not a normal finish
+    // Kick-out if this was not a normal finish
     if (cause != Cause.FINISH && !context.isLocalRoot()) { // a child
       TraceContext parent = childToParent.remove(context);
       parentToChildren.remove(parent, span);
