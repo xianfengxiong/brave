@@ -15,30 +15,32 @@ package brave.internal.recorder;
 
 import brave.Tracing;
 import brave.handler.MutableSpan;
-import brave.handler.SpanListener;
+import brave.handler.SpanCollector;
+import brave.internal.Nullable;
 import brave.internal.Platform;
 import brave.internal.weaklockfree.WeakConcurrentMap;
 import brave.propagation.TraceContext;
 
 /** Internal support class for {@link Tracing.Builder#trackOrphans()}. */
-public final class OrphanTracker extends SpanListener {
+public final class OrphanTracker implements SpanCollector {
   final WeakConcurrentMap<MutableSpan, Throwable> spanToCaller = new WeakConcurrentMap<>();
 
   @Override
-  public void onCreate(TraceContext parent, TraceContext context, MutableSpan span) {
+  public void begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
     Throwable oldCaller = spanToCaller.putIfProbablyAbsent(span,
       new Throwable("Thread " + Thread.currentThread().getName() + " allocated span here"));
     assert oldCaller == null :
       "Bug: unexpected to have an existing reference to a new MutableSpan!";
   }
 
-  @Override public void onOrphan(TraceContext context, MutableSpan span) {
-    Throwable caller = spanToCaller.getIfPresent(span);
-    if (caller != null) {
+  @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
+    Throwable caller = spanToCaller.remove(span);
+    if (cause != Cause.ORPHAN && caller != null) {
       String message = span.equals(new MutableSpan(context, null))
         ? "Span " + context + " was allocated but never used"
         : "Span " + context + " neither finished nor flushed before GC";
       Platform.get().log(message, caller);
     }
+    return true;
   }
 }

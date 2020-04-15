@@ -16,12 +16,12 @@ package brave;
 import brave.baggage.BaggageField;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
-import brave.handler.SpanListener;
+import brave.handler.SpanCollector;
 import brave.internal.IpLiteral;
 import brave.internal.Nullable;
 import brave.internal.Platform;
 import brave.internal.handler.NoopAwareFinishedSpanHandler;
-import brave.internal.handler.SafeSpanListener;
+import brave.internal.handler.SafeSpanCollector;
 import brave.internal.handler.ZipkinFinishedSpanHandler;
 import brave.internal.recorder.OrphanTracker;
 import brave.internal.recorder.PendingSpans;
@@ -149,7 +149,7 @@ public abstract class Tracing implements Closeable {
     Propagation.Factory propagationFactory = B3Propagation.FACTORY;
     ErrorParser errorParser = ErrorParser.get();
     Set<FinishedSpanHandler> finishedSpanHandlers = new LinkedHashSet<>(); // dupes not ok
-    Set<SpanListener> spanListeners = new LinkedHashSet<>(); // dupes not ok
+    Set<SpanCollector> spanCollectors = new LinkedHashSet<>(); // dupes not ok
 
     Builder() {
       defaultSpan.localServiceName("unknown");
@@ -368,14 +368,14 @@ public abstract class Tracing implements Closeable {
       return this;
     }
 
-    public Builder addSpanListener(SpanListener spanListener) {
-      if (spanListener == null) throw new NullPointerException("spanListener == null");
+    public Builder addSpanCollector(SpanCollector spanCollector) {
+      if (spanCollector == null) throw new NullPointerException("spanCollector == null");
 
       // Some configuration can coerce to no-op, ignore in this case.
-      if (spanListener == SpanListener.NOOP) return this;
+      if (spanCollector == SpanCollector.NOOP) return this;
 
-      if (!spanListeners.add(spanListener)) {
-        Platform.get().log("Please check configuration as %s was added twice", spanListener, null);
+      if (!spanCollectors.add(spanCollector)) {
+        Platform.get().log("Please check configuration as %s was added twice", spanCollector, null);
       }
       return this;
     }
@@ -477,10 +477,10 @@ public abstract class Tracing implements Closeable {
         finishedSpanHandler = new LogFinishedSpanHandler();
       }
 
-      Set<SpanListener> spanListeners = new LinkedHashSet<>(builder.spanListeners);
-      if (builder.trackOrphans) spanListeners.add(new OrphanTracker());
-      SpanListener spanListener =
-        SafeSpanListener.create(spanListeners.toArray(new SpanListener[0]));
+      Set<SpanCollector> spanCollectors = new LinkedHashSet<>(builder.spanCollectors);
+      if (builder.trackOrphans) spanCollectors.add(new OrphanTracker());
+      SpanCollector spanCollector =
+        SafeSpanCollector.create(spanCollectors.toArray(new SpanCollector[0]));
 
       Set<FinishedSpanHandler> orphanedSpanHandlers = new LinkedHashSet<>();
       for (FinishedSpanHandler handler : spanHandlers) {
@@ -494,12 +494,12 @@ public abstract class Tracing implements Closeable {
       }
 
       PendingSpans pendingSpans =
-        new PendingSpans(defaultSpan, clock, spanListener, orphanedSpanHandler, noop);
+        new PendingSpans(defaultSpan, clock, spanCollector, orphanedSpanHandler, noop);
 
       this.tracer = new Tracer(
         builder.clock,
         builder.propagationFactory,
-        spanListener,
+        spanCollector,
         finishedSpanHandler,
         pendingSpans,
         builder.sampler,

@@ -17,7 +17,8 @@ import brave.Clock;
 import brave.Tracer;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
-import brave.handler.SpanListener;
+import brave.handler.SpanCollector;
+import brave.handler.SpanCollector.Cause;
 import brave.internal.Nullable;
 import brave.internal.weaklockfree.WeakConcurrentMap;
 import brave.propagation.TraceContext;
@@ -37,15 +38,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingSpan> {
   final MutableSpan defaultSpan;
   final Clock clock;
-  final SpanListener spanListener;
+  final SpanCollector spanCollector;
   final FinishedSpanHandler orphanedSpanHandler;
   final AtomicBoolean noop;
 
-  public PendingSpans(MutableSpan defaultSpan, Clock clock, SpanListener spanListener,
+  public PendingSpans(MutableSpan defaultSpan, Clock clock, SpanCollector spanCollector,
     FinishedSpanHandler orphanedSpanHandler, AtomicBoolean noop) {
     this.defaultSpan = defaultSpan;
     this.clock = clock;
-    this.spanListener = spanListener;
+    this.spanCollector = spanCollector;
     this.orphanedSpanHandler = orphanedSpanHandler;
     this.noop = noop;
   }
@@ -91,21 +92,22 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     assert parent != null || context.isLocalRoot() :
       "Bug (or unexpected call to internal code): parent can only be null in a local root!";
 
-    spanListener.onCreate(parent, context, newSpan.span);
+    spanCollector.begin(newSpan.collectorContext, newSpan.span, parentSpan != null
+      ? parentSpan.collectorContext : null);
     return newSpan;
   }
 
   /** @see brave.Span#abandon() */
   public void abandon(TraceContext context) {
     PendingSpan last = remove(context);
-    if (last != null) spanListener.onAbandon(context, last.span);
+    if (last != null) spanCollector.end(last.collectorContext, last.span, Cause.ABANDON);
   }
 
   /** @see brave.Span#flush() */
   public boolean flush(TraceContext context) {
     PendingSpan last = remove(context);
     if (last == null) return false;
-    spanListener.onFlush(context, last.span);
+    spanCollector.end(last.collectorContext, last.span, Cause.FLUSH);
     return true;
   }
 
@@ -120,8 +122,7 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     PendingSpan last = remove(context);
     if (last == null) return false;
     last.span.finishTimestamp(timestamp != 0L ? timestamp : last.clock.currentTimeMicroseconds());
-
-    spanListener.onFinish(context, last.span);
+    spanCollector.end(last.collectorContext, last.span, Cause.FINISH);
     return true;
   }
 
@@ -140,9 +141,9 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
       assert value.context() == null : "unexpected for the weak referent to be present after GC!";
       if (flushTime == 0L) flushTime = clock.currentTimeMicroseconds();
 
-      TraceContext context = value.backupContext;
+      TraceContext context = value.collectorContext;
 
-      spanListener.onOrphan(context, value.span);
+      spanCollector.end(value.collectorContext, value.span, Cause.ORPHAN);
       value.span.annotate(flushTime, "brave.flush");
       orphanedSpanHandler.handle(context, value.span);
     }

@@ -16,7 +16,7 @@ package brave.internal.recorder;
 import brave.GarbageCollectors;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
-import brave.handler.SpanListener;
+import brave.handler.SpanCollector;
 import brave.internal.InternalPropagation;
 import brave.propagation.SamplingFlags;
 import brave.propagation.TraceContext;
@@ -75,7 +75,7 @@ public class PendingSpansTest {
     defaultSpan.localServiceName("favistar");
     defaultSpan.localIp("1.2.3.4");
     pendingSpans =
-      new PendingSpans(defaultSpan, () -> clock.incrementAndGet() * 1000L, SpanListener.NOOP,
+      new PendingSpans(defaultSpan, () -> clock.incrementAndGet() * 1000L, SpanCollector.NOOP,
         handler, new AtomicBoolean());
   }
 

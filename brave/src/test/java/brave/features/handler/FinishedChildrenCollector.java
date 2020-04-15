@@ -14,7 +14,8 @@
 package brave.features.handler;
 
 import brave.handler.MutableSpan;
-import brave.handler.SpanListener;
+import brave.handler.SpanCollector;
+import brave.internal.Nullable;
 import brave.propagation.TraceContext;
 import com.blogspot.mydailyjava.weaklockfree.WeakConcurrentMap;
 import java.util.Iterator;
@@ -23,7 +24,7 @@ import java.util.Set;
 
 import static java.util.Collections.emptyIterator;
 
-public abstract class FinishedChildrenListener extends SpanListener {
+public abstract class FinishedChildrenCollector implements SpanCollector {
 
   protected abstract void onFinish(MutableSpan parent, Iterator<MutableSpan> children);
 
@@ -32,36 +33,30 @@ public abstract class FinishedChildrenListener extends SpanListener {
     new WeakConcurrentMap<>(false);
   final ParentToChildren parentToChildren = new ParentToChildren();
 
-  @Override public void onCreate(TraceContext parent, TraceContext context, MutableSpan span) {
+  @Override
+  public void begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
     if (!context.isLocalRoot()) { // a child
       childToParent.putIfProbablyAbsent(context, parent);
       parentToChildren.add(parent, span);
     }
   }
 
-  @Override public void onAbandon(TraceContext context, MutableSpan span) {
-    if (!context.isLocalRoot()) { // a child
+  @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
+    // Kick-out if the this was not a normal finish
+    if (cause != Cause.FINISH && !context.isLocalRoot()) { // a child
       TraceContext parent = childToParent.remove(context);
       parentToChildren.remove(parent, span);
+      return true;
     }
-  }
 
-  @Override public void onFlush(TraceContext context, MutableSpan span) {
-    onAbandon(context, span);
-  }
-
-  @Override public void onOrphan(TraceContext context, MutableSpan span) {
-    onAbandon(context, span);
-  }
-
-  @Override public void onFinish(TraceContext context, MutableSpan span) {
     // There could be a lot of children. Instead of copying the list result, expose the iterator.
     // The main goal is to not add too much overhead as this is invoked on the same thread as
     // application code which implicitly call Span.finish() through instrumentation.
     childToParent.remove(context);
     Set<MutableSpan> children = parentToChildren.remove(context);
     Iterator<MutableSpan> child = children != null ? children.iterator() : emptyIterator();
-    FinishedChildrenListener.this.onFinish(span, child);
+    FinishedChildrenCollector.this.onFinish(span, child);
+    return true;
   }
 
   static final class ParentToChildren {
