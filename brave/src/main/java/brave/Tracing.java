@@ -378,7 +378,7 @@ public abstract class Tracing implements Closeable {
      * to false.
      *
      * <p>The primary use case is to implement a <a href="https://github.com/openzipkin-contrib/zipkin-secondary-sampling">sampling
-     * overlay</a>, such as boosting the sample rate for a subset of the network depending on the
+     * overlay</a>TracingFactoryBeanTestTracingFactoryBeanTestTracingFactoryBeanTestTracingFactoryBeanTest, such as boosting the sample rate for a subset of the network depending on the
      * value of a {@link BaggageField baggage field}. This means that data will report when either
      * the trace is normally sampled, or secondarily sampled via a custom header.
      *
