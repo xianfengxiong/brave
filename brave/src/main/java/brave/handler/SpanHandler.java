@@ -89,10 +89,6 @@ public abstract class SpanHandler {
 
   /** Use to avoid comparing against null references */
   public static final SpanHandler NOOP = new SpanHandler() {
-    @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
-      return true;
-    }
-
     @Override public String toString() {
       return "NoopSpanHandler{}";
     }
@@ -143,5 +139,7 @@ public abstract class SpanHandler {
    * @return {@code true} retains the span, and should almost always be used. {@code false} drops
    * the span, making it invisible to later handlers such as Zipkin.
    */
-  public abstract boolean end(TraceContext context, MutableSpan span, Cause cause);
+  public boolean end(TraceContext context, MutableSpan span, Cause cause) {
+    return true;
+  }
 }
