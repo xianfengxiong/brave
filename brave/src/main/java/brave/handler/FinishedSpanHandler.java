@@ -25,13 +25,13 @@ import brave.propagation.TraceContext;
  * <p>{@link TraceContext#sampled() Sampled spans} hit this stage before reporting to Zipkin.
  * This means changes to the mutable span will reflect in reported data.
  *
- * <p>When Zipkin's reporter is {@link zipkin2.reporter.Reporter#NOOP} or the context is
+ * <p>Even if Zipkin's reporter is {@link zipkin2.reporter.Reporter#NOOP} or the context is
  * unsampled, this will still receive spans where {@link TraceContext#sampledLocal()} is true.
  *
- * @see #alwaysSampleLocal()
+ * @see SpanHandler
  * @since 5.4
  */
-public abstract class FinishedSpanHandler {
+public abstract class FinishedSpanHandler extends SpanHandler {
   /** Use to avoid comparing against null references */
   public static final FinishedSpanHandler NOOP = new FinishedSpanHandler() {
     @Override public boolean handle(TraceContext context, MutableSpan span) {
@@ -128,15 +128,18 @@ public abstract class FinishedSpanHandler {
     return false;
   }
 
-  /**
-   * When true, all spans become real spans even if they aren't sampled remotely. This allows
-   * finished span handlers (such as metrics) to consider attributes that are not always visible
-   * before-the-fact, such as http paths. Defaults to false and affects {@link
-   * TraceContext#sampledLocal()}.
-   *
-   * @see #handle(TraceContext, MutableSpan)
-   */
-  public boolean alwaysSampleLocal() {
-    return false;
+  @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
+    switch (cause) {
+      case ABANDON:
+        return true;
+      case FLUSH:
+      case FINISH:
+        return handle(context, span);
+      case ORPHAN:
+        return !supportsOrphans() || handle(context, span);
+      default:
+        assert false : "Bug!: missing state handling for " + cause;
+        return true;
+    }
   }
 }

@@ -14,7 +14,7 @@
 package brave.features.handler;
 
 import brave.handler.MutableSpan;
-import brave.handler.SpanCollector;
+import brave.handler.SpanHandler;
 import brave.internal.Nullable;
 import brave.propagation.TraceContext;
 import com.blogspot.mydailyjava.weaklockfree.WeakConcurrentMap;
@@ -24,21 +24,22 @@ import java.util.Set;
 
 import static java.util.Collections.emptyIterator;
 
-public abstract class FinishedChildrenCollector implements SpanCollector {
+public abstract class FinishedChildrenHandler extends SpanHandler {
 
   protected abstract void onFinish(MutableSpan parent, Iterator<MutableSpan> children);
 
-  /** This holds the children of the current parent until the former is finished or abandoned. */
+  /** This holds the children of the current parent until the former is  or abandoned. */
   final WeakConcurrentMap<TraceContext, TraceContext> childToParent =
     new WeakConcurrentMap<>(false);
   final ParentToChildren parentToChildren = new ParentToChildren();
 
   @Override
-  public void begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
+  public boolean begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
     if (!context.isLocalRoot()) { // a child
       childToParent.putIfProbablyAbsent(context, parent);
       parentToChildren.add(parent, span);
     }
+    return true;
   }
 
   @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
@@ -55,7 +56,7 @@ public abstract class FinishedChildrenCollector implements SpanCollector {
     childToParent.remove(context);
     Set<MutableSpan> children = parentToChildren.remove(context);
     Iterator<MutableSpan> child = children != null ? children.iterator() : emptyIterator();
-    FinishedChildrenCollector.this.onFinish(span, child);
+    FinishedChildrenHandler.this.onFinish(span, child);
     return true;
   }
 

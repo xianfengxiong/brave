@@ -11,26 +11,33 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
-package brave.internal.recorder;
+package brave.internal.handler;
 
+import brave.Clock;
 import brave.Tracing;
 import brave.handler.MutableSpan;
-import brave.handler.SpanCollector;
+import brave.handler.SpanHandler;
 import brave.internal.Nullable;
 import brave.internal.Platform;
 import brave.internal.weaklockfree.WeakConcurrentMap;
 import brave.propagation.TraceContext;
 
 /** Internal support class for {@link Tracing.Builder#trackOrphans()}. */
-public final class OrphanTracker implements SpanCollector {
+public final class OrphanTracker extends SpanHandler {
+  final Clock clock; // only used when a span is orphaned
   final WeakConcurrentMap<MutableSpan, Throwable> spanToCaller = new WeakConcurrentMap<>();
 
+  public OrphanTracker(Clock clock) {
+    this.clock = clock;
+  }
+
   @Override
-  public void begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
+  public boolean begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
     Throwable oldCaller = spanToCaller.putIfProbablyAbsent(span,
       new Throwable("Thread " + Thread.currentThread().getName() + " allocated span here"));
     assert oldCaller == null :
       "Bug: unexpected to have an existing reference to a new MutableSpan!";
+    return true;
   }
 
   @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
@@ -41,6 +48,7 @@ public final class OrphanTracker implements SpanCollector {
         : "Span " + context + " neither finished nor flushed before GC";
       Platform.get().log(message, caller);
     }
+    span.annotate(clock.currentTimeMicroseconds(), "brave.flush");
     return true;
   }
 }

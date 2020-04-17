@@ -15,8 +15,8 @@ package brave.features.handler;
 
 import brave.Tracer;
 import brave.Tracing;
-import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
+import brave.handler.SpanHandler;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -28,14 +28,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * This shows how a {@link FinishedSpanHandler} can add data some external formats need, such as
- * child count.
+ * This shows how a {@link SpanHandler} can add data some external formats need, such as child
+ * count.
  *
  * <p><em>Note:</em> this currently only works with children fully enclosed by their parents. If
  * you have spans that finish after their parent, you'll need a more fancy implementation.
  */
 public class CountingChildrenTest {
-  static final class TagChildCount extends FinishedChildrenCollector {
+  static final class TagChildCount extends FinishedChildrenHandler {
     @Override protected void onFinish(MutableSpan parent, Iterator<MutableSpan> children) {
       int count = 0;
       for (; children.hasNext(); children.next()) {
@@ -48,7 +48,7 @@ public class CountingChildrenTest {
   List<zipkin2.Span> spans = new ArrayList<>();
   Tracing tracing = Tracing.newBuilder()
     .spanReporter(spans::add)
-    .addSpanCollector(new TagChildCount())
+    .addSpanHandler(new TagChildCount())
     .build();
   Tracer tracer = tracing.tracer();
 

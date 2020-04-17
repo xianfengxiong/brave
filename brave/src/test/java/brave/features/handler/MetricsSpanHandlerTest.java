@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 The OpenZipkin Authors
+ * Copyright 2013-2020 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -25,12 +25,12 @@ import zipkin2.Span;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.failBecauseExceptionWasNotThrown;
 
-public class MetricsFinishedSpanHandlerTest {
+public class MetricsSpanHandlerTest {
   SimpleMeterRegistry registry = new SimpleMeterRegistry();
   List<Span> spans = new ArrayList<>();
   Tracing tracing = Tracing.newBuilder()
     .spanReporter(spans::add)
-    .addFinishedSpanHandler(new MetricsFinishedSpanHandler(registry, "span", "foo"))
+    .addSpanHandler(new MetricsSpanHandler(registry, "span", "foo"))
     .build();
 
   @After public void after() {

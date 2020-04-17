@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 The OpenZipkin Authors
+ * Copyright 2013-2020 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -13,8 +13,8 @@
  */
 package brave.features.handler;
 
-import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
+import brave.handler.SpanHandler;
 import brave.propagation.TraceContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -24,15 +24,15 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.springframework.util.StringUtils;
 
-/** Example finished span handler which emits metrics for each span with a given name */
-public class MetricsFinishedSpanHandler extends FinishedSpanHandler {
+/** Example  span handler which emits metrics for each span with a given name */
+public class MetricsSpanHandler extends SpanHandler {
   static final Tag EXCEPTION_NONE = Tag.of("exception", "None");
 
   final MeterRegistry registry;
   final String metricName;
   final Map<String, Tag> nameToTag;
 
-  MetricsFinishedSpanHandler(MeterRegistry registry, String metricName, String... names) {
+  MetricsSpanHandler(MeterRegistry registry, String metricName, String... names) {
     Map<String, Tag> nameToTag = new LinkedHashMap<>();
     for (String name : names) {
       nameToTag.put(name, Tag.of("name", name));
@@ -50,7 +50,9 @@ public class MetricsFinishedSpanHandler extends FinishedSpanHandler {
     return true;
   }
 
-  @Override public boolean handle(TraceContext context, MutableSpan span) {
+  @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
+    if (cause != Cause.FINISH) return true;
+
     Tag nameTag = nameToTag.get(span.name());
     if (nameTag == null) return true; // no tag
 

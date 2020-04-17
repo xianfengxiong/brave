@@ -13,31 +13,27 @@
  */
 package brave;
 
-import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
 import brave.internal.recorder.PendingSpans;
 import brave.propagation.TraceContext;
 
 /** This wraps the public api and guards access to a mutable span. */
 final class RealSpan extends Span {
-
   final TraceContext context;
   final PendingSpans pendingSpans;
   final MutableSpan state;
   final Clock clock;
-  final FinishedSpanHandler finishedSpanHandler;
+  boolean abandoned = false; // guarded by state
 
   RealSpan(TraceContext context,
     PendingSpans pendingSpans,
     MutableSpan state,
-    Clock clock,
-    FinishedSpanHandler finishedSpanHandler
+    Clock clock
   ) {
     this.context = context;
     this.pendingSpans = pendingSpans;
     this.state = state;
     this.clock = clock;
-    this.finishedSpanHandler = finishedSpanHandler;
   }
 
   @Override public boolean isNoop() {
@@ -145,18 +141,23 @@ final class RealSpan extends Span {
 
   @Override public void finish(long timestamp) {
     synchronized (state) {
-      if (!pendingSpans.finish(context, timestamp)) return;
+      if (abandoned) return;
+      pendingSpans.finish(context, timestamp);
     }
-    finishedSpanHandler.handle(context, state);
   }
 
   @Override public void abandon() {
-    pendingSpans.abandon(context);
+    synchronized (state) {
+      abandoned = true;
+      pendingSpans.abandon(context);
+    }
   }
 
   @Override public void flush() {
-    if (!pendingSpans.flush(context)) return;
-    finishedSpanHandler.handle(context, state);
+    synchronized (state) {
+      if (abandoned) return;
+      pendingSpans.flush(context);
+    }
   }
 
   @Override public String toString() {

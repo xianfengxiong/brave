@@ -23,8 +23,8 @@ import java.lang.ref.WeakReference;
  * reporting (ex to Zipkin) and data manipulation, such as redaction for security purposes.
  *
  * <h3>Relationship to Span lifecycle</h3>
- * The pair of {@link #begin} and {@link #end} seems the same as the span lifecycle. In
- * most cases it will be the same, but you cannot assume this.
+ * The pair of {@link #begin} and {@link #end} seems the same as the span lifecycle. In most cases
+ * it will be the same, but you cannot assume this.
  *
  * <p>A {@link TraceContext} could be recorded twice, for example, if a long operation
  * began, called {@link Span#flush()} (recording 1) and later called {@link Span#finish()}
@@ -49,9 +49,9 @@ import java.lang.ref.WeakReference;
  * <p>The {@link #begin} callback primarily supports tracking of children, or partitioning of
  * data for backend that needs to see an entire {@linkplain TraceContext#localRootId() local root}.
  */
-public interface SpanCollector {
+public abstract class SpanHandler {
   /** What ended the data collection? */
-  enum Cause {
+  public enum Cause {
     /**
      * Called on {@link Span#abandon()}.
      *
@@ -88,18 +88,26 @@ public interface SpanCollector {
   }
 
   /** Use to avoid comparing against null references */
-  SpanCollector NOOP = new SpanCollector() {
-    @Override public void begin(TraceContext context, MutableSpan span, TraceContext parent) {
-    }
-
+  public static final SpanHandler NOOP = new SpanHandler() {
     @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
       return true;
     }
 
     @Override public String toString() {
-      return "NoopSpanCollector{}";
+      return "NoopSpanHandler{}";
     }
   };
+
+  /**
+   * When true, all spans become real spans even if they aren't sampled remotely. This allows span
+   * handlers (such as metrics) to consider attributes that are not always visible before-the-fact,
+   * such as http paths. Defaults to false and affects {@link TraceContext#sampledLocal()}.
+   *
+   * @see #begin(TraceContext, MutableSpan, TraceContext)
+   */
+  public boolean alwaysSampleLocal() {
+    return false;
+  }
 
   /**
    * This is called when a span is sampled, but before it is started.
@@ -111,8 +119,13 @@ public interface SpanCollector {
    * visible to later collectors.
    * @param parent can be {@code null} only when the new context is a {@linkplain
    * TraceContext#isLocalRoot() local root}.
+   * @return {@code true} retains the span, and should almost always be used. {@code false} makes it
+   * invisible to later handlers such as Zipkin.
+   * @see #alwaysSampleLocal()
    */
-  void begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent);
+  public boolean begin(TraceContext context, MutableSpan span, @Nullable TraceContext parent) {
+    return true;
+  }
 
   /**
    * Called when data collection completes for one of the following reasons:
@@ -128,7 +141,7 @@ public interface SpanCollector {
    * @param span same instance as passed to {@link #begin}
    * @param cause why the data collection stopped.
    * @return {@code true} retains the span, and should almost always be used. {@code false} drops
-   * the span, making it invisible to later collectors such as Zipkin.
+   * the span, making it invisible to later handlers such as Zipkin.
    */
-  boolean end(TraceContext context, MutableSpan span, Cause cause);
+  public abstract boolean end(TraceContext context, MutableSpan span, Cause cause);
 }

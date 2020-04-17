@@ -16,14 +16,13 @@ package brave;
 import brave.baggage.BaggageField;
 import brave.handler.FinishedSpanHandler;
 import brave.handler.MutableSpan;
-import brave.handler.SpanCollector;
+import brave.handler.SpanHandler;
 import brave.internal.IpLiteral;
 import brave.internal.Nullable;
 import brave.internal.Platform;
-import brave.internal.handler.NoopAwareFinishedSpanHandler;
-import brave.internal.handler.SafeSpanCollector;
-import brave.internal.handler.ZipkinFinishedSpanHandler;
-import brave.internal.recorder.OrphanTracker;
+import brave.internal.handler.NoopAwareSpanHandler;
+import brave.internal.handler.OrphanTracker;
+import brave.internal.handler.ZipkinSpanHandler;
 import brave.internal.recorder.PendingSpans;
 import brave.propagation.B3Propagation;
 import brave.propagation.CurrentTraceContext;
@@ -148,8 +147,7 @@ public abstract class Tracing implements Closeable {
     boolean trackOrphans = false;
     Propagation.Factory propagationFactory = B3Propagation.FACTORY;
     ErrorParser errorParser = ErrorParser.get();
-    Set<FinishedSpanHandler> finishedSpanHandlers = new LinkedHashSet<>(); // dupes not ok
-    Set<SpanCollector> spanCollectors = new LinkedHashSet<>(); // dupes not ok
+    Set<SpanHandler> spanHandlers = new LinkedHashSet<>(); // dupes not ok
 
     Builder() {
       defaultSpan.localServiceName("unknown");
@@ -357,25 +355,19 @@ public abstract class Tracing implements Closeable {
      * @see TraceContext#sampledLocal()
      */
     public Builder addFinishedSpanHandler(FinishedSpanHandler handler) {
-      if (handler == null) throw new NullPointerException("finishedSpanHandler == null");
-
       // Some configuration can coerce to no-op, ignore in this case.
       if (handler == FinishedSpanHandler.NOOP) return this;
-
-      if (!finishedSpanHandlers.add(handler)) {
-        Platform.get().log("Please check configuration as %s was added twice", handler, null);
-      }
-      return this;
+      return addSpanHandler(handler);
     }
 
-    public Builder addSpanCollector(SpanCollector spanCollector) {
-      if (spanCollector == null) throw new NullPointerException("spanCollector == null");
+    public Builder addSpanHandler(SpanHandler spanHandler) {
+      if (spanHandler == null) throw new NullPointerException("spanHandler == null");
 
       // Some configuration can coerce to no-op, ignore in this case.
-      if (spanCollector == SpanCollector.NOOP) return this;
+      if (spanHandler == SpanHandler.NOOP) return this;
 
-      if (!spanCollectors.add(spanCollector)) {
-        Platform.get().log("Please check configuration as %s was added twice", spanCollector, null);
+      if (!spanHandlers.add(spanHandler)) {
+        Platform.get().log("Please check configuration as %s was added twice", spanHandler, null);
       }
       return this;
     }
@@ -426,17 +418,17 @@ public abstract class Tracing implements Closeable {
     }
   }
 
-  static final class LogFinishedSpanHandler extends FinishedSpanHandler {
+  static final class LogSpanHandler extends SpanHandler {
     final Logger logger = Logger.getLogger(Tracer.class.getName());
 
-    @Override public boolean handle(TraceContext context, MutableSpan span) {
+    @Override public boolean end(TraceContext context, MutableSpan span, Cause cause) {
       if (!logger.isLoggable(Level.INFO)) return false;
       logger.info(span.toString());
       return true;
     }
 
     @Override public String toString() {
-      return "LogFinishedSpanHandler{name=" + logger.getName() + "}";
+      return "LogSpanHandler{name=" + logger.getName() + "}";
     }
   }
 
@@ -461,52 +453,31 @@ public abstract class Tracing implements Closeable {
 
       MutableSpan defaultSpan = new MutableSpan(builder.defaultSpan); // safe copy
 
-      Set<FinishedSpanHandler> spanHandlers = new LinkedHashSet<>(builder.finishedSpanHandlers);
+      Set<SpanHandler> spanHandlers = new LinkedHashSet<>(builder.spanHandlers);
       // When present, the Zipkin handler is invoked after the user-supplied finished span handlers.
       if (builder.zipkinSpanReporter != null) {
-        spanHandlers.add(new ZipkinFinishedSpanHandler(defaultSpan,
-          (Reporter<zipkin2.Span>) builder.zipkinSpanReporter, errorParser,
-          builder.alwaysReportSpans)
+        spanHandlers.add(
+          new ZipkinSpanHandler(defaultSpan, (Reporter<zipkin2.Span>) builder.zipkinSpanReporter,
+            errorParser, builder.alwaysReportSpans)
         );
       }
+      if (spanHandlers.isEmpty()) spanHandlers.add(new LogSpanHandler());
+      if (builder.trackOrphans) spanHandlers.add(new OrphanTracker(clock));
 
       // Make sure any exceptions caused by handlers don't crash callers
-      FinishedSpanHandler finishedSpanHandler =
-        NoopAwareFinishedSpanHandler.create(spanHandlers, noop);
-      if (finishedSpanHandler == FinishedSpanHandler.NOOP) {
-        finishedSpanHandler = new LogFinishedSpanHandler();
-      }
-
-      Set<SpanCollector> spanCollectors = new LinkedHashSet<>(builder.spanCollectors);
-      if (builder.trackOrphans) spanCollectors.add(new OrphanTracker());
-      SpanCollector spanCollector =
-        SafeSpanCollector.create(spanCollectors.toArray(new SpanCollector[0]));
-
-      Set<FinishedSpanHandler> orphanedSpanHandlers = new LinkedHashSet<>();
-      for (FinishedSpanHandler handler : spanHandlers) {
-        if (handler.supportsOrphans()) orphanedSpanHandlers.add(handler);
-      }
-
-      FinishedSpanHandler orphanedSpanHandler = finishedSpanHandler;
-      boolean allHandlersSupportOrphans = spanHandlers.equals(orphanedSpanHandlers);
-      if (!allHandlersSupportOrphans) {
-        orphanedSpanHandler = NoopAwareFinishedSpanHandler.create(orphanedSpanHandlers, noop);
-      }
-
-      PendingSpans pendingSpans =
-        new PendingSpans(defaultSpan, clock, spanCollector, orphanedSpanHandler, noop);
+      SpanHandler spanHandler =
+        NoopAwareSpanHandler.create(spanHandlers.toArray(new SpanHandler[0]), noop);
 
       this.tracer = new Tracer(
         builder.clock,
         builder.propagationFactory,
-        spanCollector,
-        finishedSpanHandler,
-        pendingSpans,
+        spanHandler,
+        new PendingSpans(defaultSpan, clock, spanHandler, noop),
         builder.sampler,
         builder.currentTraceContext,
         builder.traceId128Bit || propagationFactory.requires128BitTraceId(),
         builder.supportsJoin && propagationFactory.supportsJoin(),
-        finishedSpanHandler.alwaysSampleLocal(),
+        spanHandler.alwaysSampleLocal(),
         noop
       );
       // assign current IFF there's no instance already current
