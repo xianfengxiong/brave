@@ -23,7 +23,6 @@ final class RealSpan extends Span {
   final PendingSpans pendingSpans;
   final MutableSpan state;
   final Clock clock;
-  boolean abandoned = false; // guarded by state
 
   RealSpan(TraceContext context,
     PendingSpans pendingSpans,
@@ -141,23 +140,16 @@ final class RealSpan extends Span {
 
   @Override public void finish(long timestamp) {
     synchronized (state) {
-      if (abandoned) return;
       pendingSpans.finish(context, timestamp);
     }
   }
 
   @Override public void abandon() {
-    synchronized (state) {
-      abandoned = true;
-      pendingSpans.abandon(context);
-    }
+    pendingSpans.abandon(context);
   }
 
   @Override public void flush() {
-    synchronized (state) {
-      if (abandoned) return;
-      pendingSpans.flush(context);
-    }
+    pendingSpans.flush(context);
   }
 
   @Override public String toString() {

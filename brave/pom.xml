@@ -56,7 +56,7 @@
       <scope>provided</scope>
     </dependency>
 
-    <!-- To show off SpanListener -->
+    <!-- To show off SpanHandler -->
     <dependency>
       <groupId>com.blogspot.mydailyjava</groupId>
       <artifactId>weak-lock-free</artifactId>

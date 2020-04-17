@@ -1,7 +1,7 @@
 # brave rationale
 
-## SpanListener
-There are a few reasons why `SpanListener` exists. For example:
+## SpanHandler
+There are a few reasons why `SpanHandler` exists. For example:
 
 * We need to manipulate Baggage without overriding `PropagationFactory`, e.g. when
 some baggage are derived (parsed from other headers): Given a create hook, one can post process
