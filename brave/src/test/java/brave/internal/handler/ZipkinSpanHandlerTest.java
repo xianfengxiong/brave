@@ -13,7 +13,6 @@
  */
 package brave.internal.handler;
 
-import brave.Clock;
 import brave.ErrorParser;
 import brave.handler.MutableSpan;
 import brave.handler.SpanHandler;
@@ -31,7 +30,6 @@ import static brave.Span.Kind.CLIENT;
 import static brave.Span.Kind.SERVER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
-import static org.mockito.Mockito.mock;
 
 public class ZipkinSpanHandlerTest {
   List<Span> spans = new ArrayList<>();

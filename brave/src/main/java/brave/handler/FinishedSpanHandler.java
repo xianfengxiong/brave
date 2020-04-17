@@ -25,7 +25,7 @@ import brave.propagation.TraceContext;
  * <p>{@link TraceContext#sampled() Sampled spans} hit this stage before reporting to Zipkin.
  * This means changes to the mutable span will reflect in reported data.
  *
- * <p>Even if Zipkin's reporter is {@link zipkin2.reporter.Reporter#NOOP} or the context is
+ * <p>When Zipkin's reporter is {@link zipkin2.reporter.Reporter#NOOP} or the context is
  * unsampled, this will still receive spans where {@link TraceContext#sampledLocal()} is true.
  *
  * @see SpanHandler

@@ -89,21 +89,21 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     assert parent != null || context.isLocalRoot() :
       "Bug (or unexpected call to internal code): parent can only be null in a local root!";
 
-    spanHandler.begin(newSpan.collectorContext, newSpan.span, parentSpan != null
-      ? parentSpan.collectorContext : null);
+    spanHandler.begin(newSpan.handlerContext, newSpan.span, parentSpan != null
+      ? parentSpan.handlerContext : null);
     return newSpan;
   }
 
   /** @see brave.Span#abandon() */
   public void abandon(TraceContext context) {
     PendingSpan last = remove(context);
-    if (last != null) spanHandler.end(last.collectorContext, last.span, Cause.ABANDON);
+    if (last != null) spanHandler.end(last.handlerContext, last.span, Cause.ABANDON);
   }
 
   /** @see brave.Span#flush() */
   public void flush(TraceContext context) {
     PendingSpan last = remove(context);
-    if (last != null) spanHandler.end(last.collectorContext, last.span, Cause.FLUSH);
+    if (last != null) spanHandler.end(last.handlerContext, last.span, Cause.FLUSH);
   }
 
   /**
@@ -117,7 +117,7 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
     PendingSpan last = remove(context);
     if (last == null) return;
     last.span.finishTimestamp(timestamp != 0L ? timestamp : last.clock.currentTimeMicroseconds());
-    spanHandler.end(last.collectorContext, last.span, Cause.FINISH);
+    spanHandler.end(last.handlerContext, last.span, Cause.FINISH);
   }
 
   /** Reports spans orphaned by garbage collection. */
@@ -128,7 +128,7 @@ public final class PendingSpans extends WeakConcurrentMap<TraceContext, PendingS
       PendingSpan value = removeStaleEntry(reference);
       if (noop || value == null) continue;
       assert value.context() == null : "unexpected for the weak referent to be present after GC!";
-      spanHandler.end(value.collectorContext, value.span, Cause.ORPHAN);
+      spanHandler.end(value.handlerContext, value.span, Cause.ORPHAN);
     }
   }
 }

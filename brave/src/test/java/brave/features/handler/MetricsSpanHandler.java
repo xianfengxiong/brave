@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.springframework.util.StringUtils;
 
-/** Example  span handler which emits metrics for each span with a given name */
+/** Example span handler which emits metrics for each span with a given name */
 public class MetricsSpanHandler extends SpanHandler {
   static final Tag EXCEPTION_NONE = Tag.of("exception", "None");
 
